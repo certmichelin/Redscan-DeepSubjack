@@ -22,9 +22,9 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMqConfig extends RabbitMqBaseConfig {
 
   /**
-   * QUEUE_DOMAINS.
+   * QUEUE_MASTERDOMAINS.
    */
-  public static final String QUEUE_DOMAINS = "com.michelin.cert.deepsubjack.masterdomains";
+  public static final String QUEUE_MASTERDOMAINS = "com.michelin.cert.deepsubjack.masterdomains";
 
   /**
    * Queue configuration method.
@@ -33,8 +33,8 @@ public class RabbitMqConfig extends RabbitMqBaseConfig {
    */
   @Bean
   public Declarables fanoutBindings() {
-    Queue queue = new Queue(QUEUE_DOMAINS, false);
-    FanoutExchange fanoutExchange = new FanoutExchange(FANOUT_DOMAINS_EXCHANGE_NAME, false, false);
+    Queue queue = new Queue(QUEUE_MASTERDOMAINS, false);
+    FanoutExchange fanoutExchange = new FanoutExchange(FANOUT_MASTERDOMAINS_EXCHANGE_NAME, false, false);
     return new Declarables(queue, fanoutExchange, BindingBuilder.bind(queue).to(fanoutExchange));
   }
 }

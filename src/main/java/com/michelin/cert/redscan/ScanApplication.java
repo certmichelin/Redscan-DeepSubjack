@@ -5,8 +5,6 @@
 package com.michelin.cert.redscan;
 
 import com.michelin.cert.redscan.utils.datalake.DatalakeStorageException;
-import com.michelin.cert.redscan.utils.models.Severity;
-import com.michelin.cert.redscan.utils.models.Vulnerability;
 import com.michelin.cert.redscan.utils.system.OsCommandExecutor;
 import com.michelin.cert.redscan.utils.system.StreamGobbler;
 
@@ -54,44 +52,35 @@ public class ScanApplication {
    *
    * @param message Message received.
    */
-  @RabbitListener(queues = {RabbitMqConfig.QUEUE_DOMAINS})
+  @RabbitListener(queues = {RabbitMqConfig.QUEUE_MASTERDOMAINS})
   public void receiveMessage(String message) {
-    LogManager.getLogger(ScanApplication.class).info(String.format("Start subjack : %s", message));
+    LogManager.getLogger(ScanApplication.class).info(String.format("Start deepsubjack : %s", message));
+    OsCommandExecutor osCommandExecutor = new OsCommandExecutor();
     try {
-      
-      //Execute Subjack.
-      OsCommandExecutor osCommandExecutor = new OsCommandExecutor();
-      StreamGobbler streamGobbler = osCommandExecutor.execute(String.format("/root/go/bin/subjack -c /root/go/src/github.com/certmichelin/subjack/fingerprints.json -a -m -d %s ", message));
 
-      if (streamGobbler != null) {
-        LogManager.getLogger(ScanApplication.class).info(String.format("Subjack terminated with status : %d", streamGobbler.getExitStatus()));
+      //Execute subfinder.
+      LogManager.getLogger(ScanApplication.class).info(String.format("Start subfinder : %s", message));
+      StreamGobbler subfinderStreamGobbler = osCommandExecutor.execute(String.format("subfinder -silent -d %s", message));
+      if (subfinderStreamGobbler != null) {
+        LogManager.getLogger(ScanApplication.class).info(String.format("Subfinder terminated with status : %d", subfinderStreamGobbler.getExitStatus()));
 
-        //Convert the stream output.
-        if (streamGobbler.getStandardOutputs() != null) {
-          if (streamGobbler.getStandardOutputs().length != 0) {
-            for (Object object : streamGobbler.getStandardOutputs()) {
-              String result = ((String) object).replaceAll("\u001B\\[[;\\d]*m", "");
-              LogManager.getLogger(ScanApplication.class).info(String.format("Subjack output : %s", result));
-              if (result.startsWith("[")) { //Remove potential error.
-                String[] tmp = result.split(" ");
-                StringBuilder subjackOutput = new StringBuilder();
-                for (int i = 0; i < tmp.length - 1; i++) {
-                  subjackOutput.append(tmp[i]).append(" ");
+        //Convert the stream output to Host List.
+        for (Object subdomain : subfinderStreamGobbler.getStandardOutputs()) {
+          LogManager.getLogger(ScanApplication.class).info(String.format("Start subjack : %s", subdomain.toString()));
+          
+          StreamGobbler subjackStreamGobbler = osCommandExecutor.execute(String.format("/root/go/bin/subjack -c /root/go/src/github.com/certmichelin/subjack/fingerprints.json -a -m -d %s ", subdomain.toString()));
+
+          if (subjackStreamGobbler.getStandardOutputs() != null) {
+            if (subjackStreamGobbler.getStandardOutputs().length != 0) {
+              for (Object subjackSubdomain : subjackStreamGobbler.getStandardOutputs()) {
+                String result = ((String) subjackSubdomain).replaceAll("\u001B\\[[;\\d]*m", "");
+                LogManager.getLogger(ScanApplication.class).info(String.format("Subjack output : %s", result));
+                if (result.startsWith("[")) { //Remove potential error.
+                  datalakeConfig.createDomain(subdomain.toString(), message);
+                  rabbitTemplate.convertAndSend(RabbitMqConfig.FANOUT_DOMAINS_EXCHANGE_NAME, "", subdomain.toString());
                 }
-                datalakeConfig.upsertDomainField(message, "subjack", subjackOutput);
-
-                //Send the vulnerability.
-                Vulnerability vulnerability = new Vulnerability(Vulnerability.generateId("redscan-subjack",message,"subjack"), 
-                        Severity.HIGH, 
-                        String.format("[%s] Subdomain potentially takeoverable", message), 
-                        String.format("The domain %s is potentially takeoverable : %s", message, subjackOutput), 
-                        message, 
-                        "redscan-subjack");
-                rabbitTemplate.convertAndSend(RabbitMqConfig.FANOUT_VULNERABILITIES_EXCHANGE_NAME, "", vulnerability.toJson());
               }
             }
-          } else {
-            datalakeConfig.upsertDomainField(message, "subjack", "None");
           }
         }
       }
@@ -99,7 +88,7 @@ public class ScanApplication {
       LogManager.getLogger(ScanApplication.class).error(String.format("Datalake Storage Exception : %s", ex.getMessage()));
     } catch (Exception ex) {
       LogManager.getLogger(ScanApplication.class).error(String.format("Exception : %s", ex.getMessage()));
-    } 
+    }
   }
 
 }
