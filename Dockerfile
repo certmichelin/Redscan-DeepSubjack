@@ -11,8 +11,8 @@ RUN /usr/local/go/bin/go get github.com/certmichelin/subjack
 RUN rm -rf /subjack
 
 #Install subfinder
-RUN wget https://github.com/projectdiscovery/subfinder/releases/download/v2.4.7/subfinder_2.4.7_linux_amd64.tar.gz
-RUN tar xvfz subfinder_2.4.7_linux_amd64.tar.gz
+RUN wget https://github.com/projectdiscovery/subfinder/releases/download/v2.4.9/subfinder_2.4.9_linux_amd64.zip
+RUN unzip subfinder_2.4.9_linux_amd64.zip
 RUN chmod +x ./subfinder
 RUN mv ./subfinder /usr/bin
 
